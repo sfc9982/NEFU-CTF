@@ -1,10 +1,9 @@
 # NEFU 2021.9 CTF 题解
 
-@(CTF题解)[CTF|隐写|RSA|PHP]
 
 第一次有幸参加东林的CTF比赛，非常开心，学到了很多东西。
 
- **自身缺点** ：
+**自身缺点** ：
 - Wireshark操作不熟练，找flag有点“黑傻掰苞米”。
 
 **get到的技能**  ：
@@ -18,7 +17,7 @@
 ### coverage(变量覆盖)
 
 如题，考察变量覆盖
-```php
+```php=
 <?php
 
 highlight_file(__FILE__);
@@ -61,7 +60,7 @@ foreach($_GET as $a => $b){
 
 /* 作恶函数1
  * 遍历GET的内容
- * 防止Payload为 flag = a & a = something_except_flag 的情况
+ * 防止Payload为 flag = a && a = something_except_flag 的情况
  */
 
 if(!isset($_GET['flag']) && !isset($_POST['flag'])){
@@ -91,24 +90,96 @@ echo "your flag: ".$flag;
 //Output:flag{**************}
 ```
 
-初始结果为`may the force`，表示程序以pps为返回值退出，要顺利向下到flag，就要满足作恶函数2的条件:给flag赋值，但由于flag内容为唯一答案且不可知，所以自除函数往下不考虑。
+初始结果为`may the force`，表示程序以pps为返回值退出，要顺利向下到flag，就要满足作恶函数2的条件:给flag赋值，但由于flag内容为唯一答案且不可知，所以自此函数往下不考虑。
 
 现在我们有两种思路：
 - A. 将flag的值赋给obs输出，并满足作恶函数1的退出条件
 - B. 将flag的值赋给pps输出，并不满足作恶函数1的退出条件，但满足2的退出条件
 
+--------------------
+
 #### Plan A:
 
-- 1. 不可对`flag`赋值
+>感谢 **b477eRy** 指正纰漏处
+
+- 1. `obs = flag`前不可对`flag`赋值
 - 2. Payload中需有`obs = flag`
 - 3. 不可pass掉作恶函数1
 
-1,3条件冲突。
-**Plan A Fail**
+先考虑`obs = flag`后的可行性:
+
+##### **输入:**
+
+```
+obs = flag
+```
+
+##### **功能函数1:**
+
+```
+   val(obs) = flag
+=> pps      = flag
+```
+flag值被复制到了pps
+
+##### **功能函数2:**
+
+```
+   val(pps) = val(flag)
+=> flag     = flag{********}
+```
+无意义
+
+现在我们处于**Line35**，答案储存于`pps`中，计划输出`pps`。
+作恶函数1通过。
+来到**Line46**，需要对`flag`赋值以输出`pps`。
+考虑在`obs = flag`前或后补充Payload: `flag = ?`。
+
+我们在 **?** 处补充变量的目的是利用`$$b`来访问以 **?** 为名称的变量内容，并将其赋给`$$flag`
+无论前后，写入的变量名是`flag{********}`，无关紧要，所以 **?** 爱填啥填啥。
+只需让 **Line36** 的条件得到满足即可，看定义可知：`? = obs`
+
+此时，输出为`pps`。因为`obs`的缺省内容为`pps`。
+利用功能函数1，新建Payload:
+```php
+$$obs = 'obs'
+$pps = 'obs'
+```
+~~相当于构建了一个映射，对`pps`的操作被嫁接给了`obs`。
+最后直接输出`obs`就是正确答案。~~
+#### **大错特错，写`obs = * `就行，在 Line 36 满足条件就直接跳了。**
+
+##### Vars:
+| obs |               pps               |    flag{\*}     |
+|:---:|:-------------------------------:|:---------------:|
+| pps | ~~N/A~~ -> ~~flag~~ -> flag{\*} | ~~obs~~ -> flag |
+
+---------------------------
+这里如果Payload中`obs=flag`在先的话:
+
+good func1:
+```php
+$pps = 'flag'
+```
+
+good func2:
+```php
+$pps = 'flag{*******}'
+……
+```
+
+`obs`没人碰，输出就是flag。
+
+##### Vars:
+| obs      | pps  |      flag{\*}       |
+| -------- |:----:|:-------------------:|
+| flag{\*} | flag | ~~obs~~ -> flag{\*} |
+
+--------------------------
 
 #### Plan B:
 
-- 1. 不可对`flag`赋值
+- 1. `pps = flag`前不可对`flag`赋值
 - 2. Payload中需有`pps = flag`
 - 3. 必须pass掉作恶函数1
 
@@ -134,14 +205,18 @@ pps = flag
    val(pps)        = val(flag)
 => "may the force" = flag{********}
 ```
+
 由于`$"may the force"`无法输出，无意义
 
 最后程序以接收Payload时的
+
 ```
 pps = flag
 ```
+
 退出，pps未受干扰。
 返回值即为我们要的flag。
+
 ## MISC
 
 > Misc 是切入 CTF 竞赛领域、培养兴趣的最佳入口。Misc 考察基本知识，对安全技能的各个层面都有不同程度的涉及，可以在很大程度上启发思维。    —— [CTF Wiki](https://ctf-wiki.org/misc/introduction/)
